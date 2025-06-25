@@ -30,15 +30,46 @@
 
 struct ImageRAM { int w, h; std::vector<unsigned char> rgba; };
 
-// ------------------------------------------------------ SDL helpers
-static SDL_GLContext create_context(SDL_Window* win)
+
+static SDL_GLContext try_context(SDL_Window* win, int major, int minor, Uint32 profile)
 {
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_COMPATIBILITY);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, major);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, minor);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, profile);
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     return SDL_GL_CreateContext(win);
 }
+
+// ------------------------------------------------------ SDL helpers
+static SDL_GLContext create_context(SDL_Window* win)
+{
+    /*SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_COMPATIBILITY);
+    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+    return SDL_GL_CreateContext(win);*/
+    
+    SDL_GLContext ctx = nullptr;
+    ctx = try_context(win, 3, 1, SDL_GL_CONTEXT_PROFILE_CORE);
+    if (!ctx) {
+        std::cerr << "Core 3.x context failed (" << SDL_GetError() << "), retrying 2.1 compat…\n";
+        SDL_GL_ResetAttributes();
+        ctx = try_context(win, 2, 1, SDL_GL_CONTEXT_PROFILE_COMPATIBILITY);
+        if (!ctx) {
+            std::cerr << "Compat 2.1 context failed (" << SDL_GetError() << "), retrying GLES 2…\n";
+            SDL_GL_ResetAttributes();
+            ctx = try_context(win, 2, 0, SDL_GL_CONTEXT_PROFILE_ES);
+            if (!ctx) {
+                std::fprintf(stderr, "All GL context attempts failed: %s\n", SDL_GetError());
+                return 0;
+            }
+        }
+    }
+    return ctx;
+}
+
+
+GLint implFmt, implType;
 
 static bool init_sdl(int w, int h, SDL_Window** outWin, SDL_GLContext* outCtx)
 {
@@ -51,6 +82,30 @@ static bool init_sdl(int w, int h, SDL_Window** outWin, SDL_GLContext* outCtx)
 
     SDL_GLContext ctx = create_context(win);
     if (!ctx)  { std::fprintf(stderr, "SDL_GL_CreateContext: %s\n", SDL_GetError()); return false; }
+    
+    bool havePBO = (glGetString(GL_VERSION) &&      // 2.1 == core PBO
+                strncmp((const char*)glGetString(GL_VERSION), "2.1", 3) == 0) ||
+               (strstr((const char*)glGetString(GL_EXTENSIONS),
+                       "GL_ARB_pixel_buffer_object") != nullptr);
+    
+                       
+    std::cout << "SDL video driver: "     << SDL_GetCurrentVideoDriver() << "\n";
+    std::cout << "GL_VENDOR    : "        << glGetString(GL_VENDOR)   << "\n";
+    std::cout << "GL_RENDERER  : "        << glGetString(GL_RENDERER) << "\n";
+    std::cout << "GL_VERSION   : "        << glGetString(GL_VERSION)  << "\n";
+    
+    
+    glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_FORMAT, &implFmt);
+    glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_TYPE,   &implType);
+    printf("native upload format = 0x%04X, type = 0x%04X\n", implFmt, implType);
+    
+    const GLubyte* ext = glGetString(GL_EXTENSIONS);
+    std::cout << "GL_EXTENSIONS: " << ext << "\n";
+
+
+    
+    std::cout << "havePBO:" << havePBO << std::endl;
+
 
     SDL_GL_SetSwapInterval(1);
     *outWin = win; *outCtx = ctx; return true;
@@ -81,12 +136,18 @@ int main()
 
     SDL_Window* win = nullptr; SDL_GLContext ctx = nullptr;
     if (!init_sdl(START_W, START_H, &win, &ctx)) return EXIT_FAILURE;
+    
+    auto TexStorage2D = (PFNGLTEXSTORAGE2DPROC)SDL_GL_GetProcAddress("glTexStorage2D");
+    auto TexStorage2DEXT = (PFNGLTEXSTORAGE2DEXTPROC)SDL_GL_GetProcAddress("glTexStorage2DEXT");
 
     std::vector<ImageRAM> images = load_images_to_ram();
 
     GLuint texID; glGenTextures(1, &texID);
     glBindTexture(GL_TEXTURE_2D, texID);
-    glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA8, W, H);
+    //glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA8, 2048, 2048);
+    TexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA8, 2048, 2048);
+    //glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 2048, 2048, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+    
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glBindTexture(GL_TEXTURE_2D, 0);
@@ -139,7 +200,7 @@ int main()
         if (frame >= 100 && !images.empty()) {
             size_t newIdx = ((frame - 100) / 200) % images.size();
             if (newIdx != currentIdx) {
-                ImageRAM& img = images[newIdx];
+                const ImageRAM& img = images[newIdx];
                 glBindTexture(GL_TEXTURE_2D, texID);
                 
                 
@@ -153,7 +214,7 @@ int main()
                 auto start = std::chrono::steady_clock::now();
                 glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
                 //glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, img.w, img.h, 0, GL_RGBA, GL_UNSIGNED_BYTE, img.rgba.data());
-                glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, W, H,GL_RGBA, GL_UNSIGNED_BYTE,img.rgba.data());
+                glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, img.w, img.h,GL_RGBA, GL_UNSIGNED_BYTE,img.rgba.data());                
                	auto elapsed = (std::chrono::steady_clock::now() - start).count();
                 std::cout << "GPU upload:" << std::to_string(elapsed/1000000) << " ms" << std::endl;
                 currentIdx = newIdx;
