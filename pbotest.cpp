@@ -66,10 +66,12 @@ static std::vector<ImageRAM> load_images_to_ram()
         if (!data) continue;
         imgs.push_back({w, h, std::vector<unsigned char>(data, data + w*h*4)});
         stbi_image_free(data);
+        std::cout << "Loaded img " << path << std::endl;
     }
     if (imgs.empty()) std::fprintf(stderr, "Warning: no texN.png images found.\n");
     return imgs;
 }
+
 
 // ------------------------------------------------------ main
 int main()
@@ -96,6 +98,13 @@ int main()
     float posY  = (START_H - quadH) * 0.5f;
     float velX  = 250.0f;   // px/s – tuned for 1080p
     float velY  = 190.0f;
+    
+    
+    unsigned char* testMemoryCopyPtr = (unsigned char*)malloc(images[0].rgba.size());
+    for(size_t offset = 0; offset < images[0].rgba.size(); off += 4096){
+      testMemoryCopyPtr[offset] = 0;
+    }
+    
 
     unsigned long frame = 0; Uint32 lastTicks = SDL_GetTicks();
     bool running = true;
@@ -128,8 +137,17 @@ int main()
         if (frame >= 100 && !images.empty()) {
             size_t newIdx = ((frame - 100) / 200) % images.size();
             if (newIdx != currentIdx) {
-                const ImageRAM& img = images[newIdx];
+                ImageRAM& img = images[newIdx];
                 glBindTexture(GL_TEXTURE_2D, texID);
+                
+                
+                auto startt = std::chrono::steady_clock::now();
+                
+                memcpy(testMemoryCopyPtr, img.rgba.data(), img.rgba.size());
+                
+       	        auto elapsedd = (std::chrono::steady_clock::now() - startt).count();
+                std::cout << "Test memcpy:" << std::to_string(elapsedd/1000000) << " ms" << std::endl;
+                
                 auto start = std::chrono::steady_clock::now();
                 glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, img.w, img.h, 0, GL_RGBA, GL_UNSIGNED_BYTE, img.rgba.data());
                	auto elapsed = (std::chrono::steady_clock::now() - start).count();
