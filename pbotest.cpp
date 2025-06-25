@@ -95,17 +95,23 @@ int main()
 
     unsigned long frame = 0; Uint32 lastTicks = SDL_GetTicks();
     bool running = true;
+    float time = 0.0f;
+    float alwaysDT = 0.01666f;
     while (running) {
         SDL_Event ev; while (SDL_PollEvent(&ev)) {
             if (ev.type == SDL_QUIT) running = false;
             if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_ESCAPE) running = false;
         }
 
+        
+        time += 0.016667f;
         Uint32 now = SDL_GetTicks();
-        float dt = (now - lastTicks) * 0.001f; lastTicks = now;
+        //float dt = (now - lastTicks) * 0.001f; lastTicks = now;
+        float dt = alwaysDT;
 
         // Background colour wave
-        float t = now * 0.001f;
+        //float t = now * 0.001f;
+        float t = time;
         float rc = 0.5f + 0.5f * std::sin(t);
         float gc = 0.5f + 0.5f * std::sin(t + 2.094395f);
         float bc = 0.5f + 0.5f * std::sin(t + 4.188790f);
