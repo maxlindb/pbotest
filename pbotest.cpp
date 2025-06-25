@@ -101,9 +101,10 @@ int main()
     
     
     unsigned char* testMemoryCopyPtr = (unsigned char*)malloc(images[0].rgba.size());
-    for(size_t offset = 0; offset < images[0].rgba.size(); off += 4096){
+    for(size_t offset = 0; offset < images[0].rgba.size(); offset += 4096){
       testMemoryCopyPtr[offset] = 0;
     }
+    
     
 
     unsigned long frame = 0; Uint32 lastTicks = SDL_GetTicks();
