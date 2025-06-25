@@ -150,6 +150,7 @@ int main()
                 std::cout << "Test memcpy:" << std::to_string(elapsedd/1000000) << " ms" << std::endl;
                 
                 auto start = std::chrono::steady_clock::now();
+                glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
                 glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, img.w, img.h, 0, GL_RGBA, GL_UNSIGNED_BYTE, img.rgba.data());
                	auto elapsed = (std::chrono::steady_clock::now() - start).count();
                 std::cout << "GPU upload:" << std::to_string(elapsed/1000000) << " ms" << std::endl;
