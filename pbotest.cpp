@@ -14,8 +14,10 @@
  *   SDL_VIDEODRIVER=kmsdrm sudo ./pbotest
  */
 
+#define GL_GLEXT_PROTOTYPES
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_opengl.h>
+#include <SDL2/SDL_opengl_glext.h>
 #include <cstdio>
 #include <cstdlib>
 #include <cmath>
@@ -26,6 +28,10 @@
 
 #define STB_IMAGE_STATIC
 #include "stb_image.h"
+
+
+
+
 
 
 struct ImageRAM { int w, h; std::vector<unsigned char> rgba; };
@@ -89,7 +95,7 @@ static bool init_sdl(int w, int h, SDL_Window** outWin, SDL_GLContext* outCtx)
                        "GL_ARB_pixel_buffer_object") != nullptr);
     
                        
-    std::cout << "SDL video driver: "     << SDL_GetCurrentVideoDriver() << "\n";
+    std::cout << "SDL video driverr: "     << SDL_GetCurrentVideoDriver() << "\n";
     std::cout << "GL_VENDOR    : "        << glGetString(GL_VENDOR)   << "\n";
     std::cout << "GL_RENDERER  : "        << glGetString(GL_RENDERER) << "\n";
     std::cout << "GL_VERSION   : "        << glGetString(GL_VERSION)  << "\n";
@@ -142,12 +148,30 @@ int main()
 
     std::vector<ImageRAM> images = load_images_to_ram();
 
-    GLuint texID; glGenTextures(1, &texID);
+    
+    int texW = 2048;
+    int texH = 2048;
+    int texChannels = 4;
+    
+    int texDataSize = texW * texH * texChannels; 
+    
+    const int numPBOS = 2;
+    GLuint pbos[numPBOS];    
+    glGenBuffers(numPBOS,pbos);
+    for(int i = 0;i < numPBOS; i++) {
+      glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbos[i]);
+      glBufferData(GL_PIXEL_UNPACK_BUFFER, texDataSize, nullptr, GL_STREAM_DRAW);
+    }
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+    int pboIndex = 0;
+    
+
+    GLuint texID;
+    glGenTextures(1, &texID);
     glBindTexture(GL_TEXTURE_2D, texID);
     //glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA8, 2048, 2048);
-    TexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA8, 2048, 2048);
-    //glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 2048, 2048, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-    
+    //TexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA8, 2048, 2048);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 2048, 2048, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glBindTexture(GL_TEXTURE_2D, 0);
@@ -201,21 +225,40 @@ int main()
             size_t newIdx = ((frame - 100) / 200) % images.size();
             if (newIdx != currentIdx) {
                 const ImageRAM& img = images[newIdx];
-                glBindTexture(GL_TEXTURE_2D, texID);
+                
                 
                 
                 auto startt = std::chrono::steady_clock::now();
                 
+                glBindTexture(GL_TEXTURE_2D, texID);
                 memcpy(testMemoryCopyPtr, img.rgba.data(), img.rgba.size());
                 
        	        auto elapsedd = (std::chrono::steady_clock::now() - startt).count();
                 std::cout << "Test memcpy:" << std::to_string(elapsedd/1000000) << " ms" << std::endl;
                 
                 auto start = std::chrono::steady_clock::now();
-                glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+                
+                /*glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
                 //glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, img.w, img.h, 0, GL_RGBA, GL_UNSIGNED_BYTE, img.rgba.data());
-                glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, img.w, img.h,GL_RGBA, GL_UNSIGNED_BYTE,img.rgba.data());                
-               	auto elapsed = (std::chrono::steady_clock::now() - start).count();
+                glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, img.w, img.h,GL_RGBA, GL_UNSIGNED_BYTE,img.rgba.data());*/                
+               	
+                
+                glBindBuffer(GL_PIXEL_UNPACK_BUFFER,pbos[pboIndex]);
+                glBufferData(GL_PIXEL_UNPACK_BUFFER,texDataSize,nullptr, GL_STREAM_DRAW);
+                
+                void* ptr = glMapBufferRange(GL_PIXEL_UNPACK_BUFFER,0,texDataSize, GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT | GL_MAP_UNSYNCHRONIZED_BIT);
+                memcpy(ptr, img.rgba.data(), texDataSize);
+                glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
+                
+                glBindTexture(GL_TEXTURE_2D, texID);
+                glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+                glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, img.w, img.h,GL_RGBA, GL_UNSIGNED_BYTE,nullptr); //null means "read from bound pbo"
+                glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+                
+                pboIndex++;
+                if(pboIndex == numPBOS)pboIndex = 0;
+                
+                auto elapsed = (std::chrono::steady_clock::now() - start).count();                
                 std::cout << "GPU upload:" << std::to_string(elapsed/1000000) << " ms" << std::endl;
                 currentIdx = newIdx;
                 
