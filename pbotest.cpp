@@ -86,6 +86,7 @@ int main()
 
     GLuint texID; glGenTextures(1, &texID);
     glBindTexture(GL_TEXTURE_2D, texID);
+    glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA8, W, H);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glBindTexture(GL_TEXTURE_2D, 0);
@@ -151,10 +152,12 @@ int main()
                 
                 auto start = std::chrono::steady_clock::now();
                 glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, img.w, img.h, 0, GL_RGBA, GL_UNSIGNED_BYTE, img.rgba.data());
+                //glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, img.w, img.h, 0, GL_RGBA, GL_UNSIGNED_BYTE, img.rgba.data());
+                glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, W, H,GL_RGBA, GL_UNSIGNED_BYTE,img.rgba.data());
                	auto elapsed = (std::chrono::steady_clock::now() - start).count();
                 std::cout << "GPU upload:" << std::to_string(elapsed/1000000) << " ms" << std::endl;
                 currentIdx = newIdx;
+                
             }
 
             // update position
