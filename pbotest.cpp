@@ -166,15 +166,18 @@ int main()
     int pboIndex = 0;
     
 
-    GLuint texID;
-    glGenTextures(1, &texID);
-    glBindTexture(GL_TEXTURE_2D, texID);
-    //glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA8, 2048, 2048);
-    //TexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA8, 2048, 2048);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 2048, 2048, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glBindTexture(GL_TEXTURE_2D, 0);
+    GLuint texIDs[2];
+    glGenTextures(2, texIDs);
+    for(int i = 0;i < 2;i++){
+        glBindTexture(GL_TEXTURE_2D, texIDs[i]);
+        //glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA8, 2048, 2048);
+        //TexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA8, 2048, 2048);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 2048, 2048, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+
 
     size_t currentIdx = SIZE_MAX; // force first upload
 
@@ -192,6 +195,9 @@ int main()
     }
     
     
+    
+    GLuint drawingTexture = texIDs[0];
+    GLuint uploadingTexture = texIDs[1];
 
     unsigned long frame = 0; Uint32 lastTicks = SDL_GetTicks();
     bool running = true;
@@ -227,7 +233,7 @@ int main()
                 const ImageRAM& img = images[newIdx];
                 
                 
-                
+                /*
                 auto startt = std::chrono::steady_clock::now();
                 
                 glBindTexture(GL_TEXTURE_2D, texID);
@@ -235,8 +241,10 @@ int main()
                 
        	        auto elapsedd = (std::chrono::steady_clock::now() - startt).count();
                 std::cout << "Test memcpy:" << std::to_string(elapsedd/1000000) << " ms" << std::endl;
+                */
                 
                 auto start = std::chrono::steady_clock::now();
+                
                 
                 /*glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
                 //glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, img.w, img.h, 0, GL_RGBA, GL_UNSIGNED_BYTE, img.rgba.data());
@@ -244,13 +252,13 @@ int main()
                	
                 
                 glBindBuffer(GL_PIXEL_UNPACK_BUFFER,pbos[pboIndex]);
-                glBufferData(GL_PIXEL_UNPACK_BUFFER,texDataSize,nullptr, GL_STREAM_DRAW);
+                //glBufferData(GL_PIXEL_UNPACK_BUFFER,texDataSize,nullptr, GL_STREAM_DRAW);
                 
                 void* ptr = glMapBufferRange(GL_PIXEL_UNPACK_BUFFER,0,texDataSize, GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT | GL_MAP_UNSYNCHRONIZED_BIT);
                 memcpy(ptr, img.rgba.data(), texDataSize);
                 glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
                 
-                glBindTexture(GL_TEXTURE_2D, texID);
+                glBindTexture(GL_TEXTURE_2D, uploadingTexture);
                 glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
                 glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, img.w, img.h,GL_RGBA, GL_UNSIGNED_BYTE,nullptr); //null means "read from bound pbo"
                 glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
@@ -263,6 +271,8 @@ int main()
                 currentIdx = newIdx;
                 
             }
+            
+            
 
             // update position
             posX += velX * dt; posY += velY * dt;
@@ -275,7 +285,7 @@ int main()
             glMatrixMode(GL_PROJECTION); glPushMatrix(); glLoadIdentity(); glOrtho(0, dw, dh, 0, -1, 1);
             glMatrixMode(GL_MODELVIEW);  glPushMatrix(); glLoadIdentity();
 
-            glEnable(GL_TEXTURE_2D); glBindTexture(GL_TEXTURE_2D, texID);
+            glEnable(GL_TEXTURE_2D); glBindTexture(GL_TEXTURE_2D, drawingTexture);
             glBegin(GL_QUADS);
                 glTexCoord2f(0,0); glVertex2f(posX,         posY);
                 glTexCoord2f(1,0); glVertex2f(posX+quadW,  posY);
@@ -292,7 +302,7 @@ int main()
         ++frame;
     }
 
-    glDeleteTextures(1, &texID);
+    //glDeleteTextures(1, texIDs);
     SDL_GL_DeleteContext(ctx); SDL_DestroyWindow(win); SDL_Quit();
     return 0;
 }
